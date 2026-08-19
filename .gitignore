@@ -1,23 +1,65 @@
+# Environment & Secrets
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.cert
+*.pfx
+secrets/
+config.local.json
+
+# Database & SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+fps_estimator.db
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Database
-*.db
-*.sqlite3
-
 # Node & Frontend
 node_modules/
-dist/
-.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+frontend/node_modules/
+.vite/
 
-# Environments
-.env
-.venv
-env/
-venv/
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
