@@ -165,21 +165,11 @@ Display : 15.6 inch FHD 144Hz"
           </button>
         </div>
       </div>
-
-      <!-- 4. Game Target Selector (Interactive Cards) -->
-      <div class="form-group">
-        <label class="field-label">Pilihan Game (Klik untuk ganti)</label>
-        <select v-model="selectedGameId" class="select-control" @change="liveRecalculate">
-          <option v-for="g in games" :key="g.id" :value="g.id">
-            {{ g.title }} ({{ g.genre }})
-          </option>
-        </select>
-      </div>
     </div>
 
     <!-- Interactive Game Selection Chips -->
     <div class="game-chips-wrap">
-      <span class="game-chips-lbl">Pilih Cepat Game:</span>
+      <label class="field-label">Target Game (Klik untuk ganti)</label>
       <div class="game-chips">
         <button 
           v-for="g in games" 
