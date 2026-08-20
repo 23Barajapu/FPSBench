@@ -24,8 +24,8 @@
   --radius-md: 10px;
   --radius-lg: 14px;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 * {
@@ -43,12 +43,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Clean Panels */
+/* Clean Panels with entrance animation */
 .panel {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
+  animation: fadeIn 0.25s ease-out;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* Badges */
@@ -61,6 +63,7 @@ body {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
+  transition: all 0.2s ease;
 }
 
 .badge-desktop {
@@ -91,15 +94,74 @@ body {
   border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Universal Button Micro-Interactions */
+button {
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+/* Vue Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.slide-down-enter-active {
+  transition: all 0.2s ease-out;
+}
+.slide-down-leave-active {
+  transition: all 0.15s ease-in;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }

@@ -11,55 +11,55 @@
       </div>
     </div>
 
-    <!-- Main FPS Numbers -->
+    <!-- Main FPS Numbers with Smooth Animated Counting -->
     <div class="metrics-grid">
       <div class="metric-card">
         <span class="metric-lbl">ESTIMASI AVERAGE FPS</span>
         <div class="metric-num-wrap">
-          <span class="metric-num">{{ result.avg_fps }}</span>
+          <span class="metric-num">{{ displayAvgFps }}</span>
           <span class="metric-unit">FPS</span>
         </div>
-        <span class="tier-label" :style="{ color: getFpsColor(result.avg_fps) }">
-          {{ getFpsStatus(result.avg_fps) }}
+        <span class="tier-label" :style="{ color: getFpsColor(displayAvgFps) }">
+          {{ getFpsStatus(displayAvgFps) }}
         </span>
       </div>
 
       <div class="metric-card">
         <span class="metric-lbl">1% LOW (KELANCARAN)</span>
         <div class="metric-num-wrap">
-          <span class="metric-num num-secondary">{{ result.one_percent_low_fps }}</span>
+          <span class="metric-num num-secondary">{{ displayLowFps }}</span>
           <span class="metric-unit">FPS</span>
         </div>
         <span class="tier-sub">
-          Penurunan frame: {{ Math.round((1 - (result.one_percent_low_fps / result.avg_fps)) * 100) }}%
+          Penurunan frame: {{ displayAvgFps > 0 ? Math.round((1 - (displayLowFps / displayAvgFps)) * 100) : 0 }}%
         </span>
       </div>
     </div>
 
-    <!-- Target Refresh Rate Compatibility Checklist -->
+    <!-- Target Refresh Rate Compatibility Checklist with pop animation -->
     <div class="hz-checklist">
       <span class="hz-title">Kesesuaian Monitor Gaming:</span>
       <div class="hz-items">
-        <div class="hz-badge" :class="{ pass: result.avg_fps >= 60 }">
-          <span class="hz-icon">{{ result.avg_fps >= 60 ? '✓' : '✗' }}</span>
+        <div class="hz-badge" :class="{ pass: displayAvgFps >= 60 }">
+          <span class="hz-icon">{{ displayAvgFps >= 60 ? '✓' : '✗' }}</span>
           <span>60 Hz (Standard)</span>
         </div>
-        <div class="hz-badge" :class="{ pass: result.avg_fps >= 120 }">
-          <span class="hz-icon">{{ result.avg_fps >= 120 ? '✓' : '✗' }}</span>
+        <div class="hz-badge" :class="{ pass: displayAvgFps >= 120 }">
+          <span class="hz-icon">{{ displayAvgFps >= 120 ? '✓' : '✗' }}</span>
           <span>120 Hz (Gaming)</span>
         </div>
-        <div class="hz-badge" :class="{ pass: result.avg_fps >= 144 }">
-          <span class="hz-icon">{{ result.avg_fps >= 144 ? '✓' : '✗' }}</span>
+        <div class="hz-badge" :class="{ pass: displayAvgFps >= 144 }">
+          <span class="hz-icon">{{ displayAvgFps >= 144 ? '✓' : '✗' }}</span>
           <span>144 Hz (Kompetitif)</span>
         </div>
-        <div class="hz-badge" :class="{ pass: result.avg_fps >= 240 }">
-          <span class="hz-icon">{{ result.avg_fps >= 240 ? '✓' : '✗' }}</span>
+        <div class="hz-badge" :class="{ pass: displayAvgFps >= 240 }">
+          <span class="hz-icon">{{ displayAvgFps >= 240 ? '✓' : '✗' }}</span>
           <span>240 Hz (eSports)</span>
         </div>
       </div>
     </div>
 
-    <!-- Bottleneck Balance Bar -->
+    <!-- Bottleneck Balance Bar with Smooth Width Transition -->
     <div class="bottleneck-section">
       <div class="bar-top">
         <span class="bar-title">Beban Hardware (Bottleneck: {{ result.bottleneck_pct }}%)</span>
@@ -71,13 +71,13 @@
       <div class="bar-track">
         <div 
           class="bar-seg cpu-bar" 
-          :style="{ width: `${result.cpu_utilization_est / (result.cpu_utilization_est + result.gpu_utilization_est) * 100}%` }"
+          :style="{ width: `${cpuPercent}%` }"
         >
           CPU
         </div>
         <div 
           class="bar-seg gpu-bar" 
-          :style="{ width: `${result.gpu_utilization_est / (result.cpu_utilization_est + result.gpu_utilization_est) * 100}%` }"
+          :style="{ width: `${gpuPercent}%` }"
         >
           GPU
         </div>
@@ -131,13 +131,63 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   result: {
     type: Object,
     default: null
   }
+})
+
+const displayAvgFps = ref(0)
+const displayLowFps = ref(0)
+let animationFrameId = null
+
+// Smooth Counter Animation
+const animateNumbers = (targetAvg, targetLow) => {
+  if (animationFrameId) cancelAnimationFrame(animationFrameId)
+  
+  const startAvg = displayAvgFps.value || 0
+  const startLow = displayLowFps.value || 0
+  const duration = 400 // ms
+  const startTime = performance.now()
+
+  const step = (now) => {
+    const elapsed = now - startTime
+    const progress = Math.min(elapsed / duration, 1)
+    
+    // Ease out cubic
+    const ease = 1 - Math.pow(1 - progress, 3)
+
+    displayAvgFps.value = Math.round(startAvg + (targetAvg - startAvg) * ease)
+    displayLowFps.value = Math.round(startLow + (targetLow - startLow) * ease)
+
+    if (progress < 1) {
+      animationFrameId = requestAnimationFrame(step)
+    } else {
+      displayAvgFps.value = targetAvg
+      displayLowFps.value = targetLow
+    }
+  }
+
+  animationFrameId = requestAnimationFrame(step)
+}
+
+watch(() => props.result, (newRes) => {
+  if (newRes) {
+    animateNumbers(newRes.avg_fps, newRes.one_percent_low_fps)
+  }
+}, { immediate: true })
+
+const cpuPercent = computed(() => {
+  if (!props.result) return 50
+  const total = props.result.cpu_utilization_est + props.result.gpu_utilization_est
+  return total > 0 ? (props.result.cpu_utilization_est / total) * 100 : 50
+})
+
+const gpuPercent = computed(() => {
+  return 100 - cpuPercent.value
 })
 
 const statusBadgeClass = computed(() => {
@@ -183,6 +233,7 @@ const getScaledFps = (targetRes) => {
 <style scoped>
 .result-panel {
   margin-top: 24px;
+  animation: fadeIn 0.3s ease-out;
 }
 
 .result-top {
@@ -195,7 +246,7 @@ const getScaledFps = (targetRes) => {
 }
 
 .game-name {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-main);
   margin-right: 10px;
@@ -226,6 +277,12 @@ const getScaledFps = (targetRes) => {
   border-radius: var(--radius-md);
   padding: 16px;
   text-align: center;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(96, 165, 250, 0.4);
 }
 
 .metric-lbl {
@@ -249,6 +306,7 @@ const getScaledFps = (targetRes) => {
   font-family: var(--font-mono);
   color: #f8fafc;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .num-secondary {
@@ -264,6 +322,7 @@ const getScaledFps = (targetRes) => {
 .tier-label {
   font-size: 0.8rem;
   font-weight: 600;
+  transition: color 0.3s ease;
 }
 
 .tier-sub {
@@ -308,12 +367,14 @@ const getScaledFps = (targetRes) => {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-dim);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hz-badge.pass {
   background: rgba(34, 197, 94, 0.12);
   color: #4ade80;
   border-color: rgba(34, 197, 94, 0.3);
+  animation: popIn 0.3s ease-out;
 }
 
 .hz-icon {
@@ -353,11 +414,12 @@ const getScaledFps = (targetRes) => {
 .gpu-txt { color: #38bdf8; }
 
 .bar-track {
-  height: 20px;
+  height: 22px;
   display: flex;
   border-radius: 4px;
   overflow: hidden;
   background: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .bar-seg {
@@ -367,6 +429,7 @@ const getScaledFps = (targetRes) => {
   font-size: 0.7rem;
   font-weight: 700;
   color: white;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .cpu-bar { background: #2563eb; }
@@ -403,6 +466,11 @@ const getScaledFps = (targetRes) => {
   text-align: center;
   display: flex;
   flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+.res-card:hover {
+  transform: translateY(-1px);
 }
 
 .res-card.current-res {
@@ -464,6 +532,7 @@ const getScaledFps = (targetRes) => {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   padding: 12px 16px;
   font-size: 0.85rem;
+  transition: all 0.25s ease;
 }
 
 .verdict-warn {
