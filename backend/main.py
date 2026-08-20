@@ -5,12 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
-from .database import engine, Base, get_db
-from .models import HardwareBenchmark, Game, PresetMultiplier
+from .database import engine, Base, get_db, SessionLocal
+from .models import HardwareBenchmark, Game, PresetMultiplier, GroundTruthBenchmark, ModelCalibration
 from .schemas import HardwareItem, GameItem, CalculationRequest, CalculationResponse
 from .calculator import calculate_fps_and_bottleneck
 from .seed_data import seed_database
 from .scraper import run_etl_pipeline, parse_raw_laptop_spec
+from .ground_truth_scraper import seed_ground_truth_benchmarks
+from .calibration_engine import evaluate_model_accuracy, run_auto_calibration
 from pydantic import BaseModel
 
 class RawSpecInput(BaseModel):
@@ -23,11 +25,14 @@ from fastapi.responses import FileResponse
 # Initialize tables & seed
 Base.metadata.create_all(bind=engine)
 seed_database()
+db_init = SessionLocal()
+seed_ground_truth_benchmarks(db_init)
+db_init.close()
 
 app = FastAPI(
     title="FPSBench - Hardware & Game FPS Performance Estimator API",
-    version="1.0.0",
-    description="API untuk kalkulator estimasi performa gaming FPS & deteksi bottleneck hardware."
+    version="2.0.0",
+    description="API untuk kalkulator estimasi performa gaming FPS, deteksi bottleneck hardware, dan kalibrasi Ground Truth."
 )
 
 # CORS middleware
@@ -49,16 +54,16 @@ def read_root():
         return FileResponse(os.path.join(frontend_dist, "index.html"))
     return {
         "status": "online",
-        "service": "Hardware & Game FPS Estimator API",
-        "version": "1.0.0"
+        "service": "FPSBench Hardware & Game FPS Estimator API",
+        "version": "2.0.0"
     }
 
 @app.get("/api/health")
 def api_health():
     return {
         "status": "online",
-        "service": "Hardware & Game FPS Estimator API",
-        "version": "1.0.0"
+        "service": "FPSBench Hardware & Game FPS Estimator API",
+        "version": "2.0.0"
     }
 
 @app.get("/api/hardware/search", response_model=List[HardwareItem])
@@ -89,29 +94,29 @@ def search_hardware(
 
 @app.get("/api/hardware/compare", response_model=List[HardwareItem])
 def compare_hardware(
-    ids: str = Query(..., description="Comma-separated IDs, e.g. 1,2,3"),
+    ids: str = Query(..., description="Comma-separated IDs of hardware items to compare, e.g. 1,2,5"),
     db: Session = Depends(get_db)
 ):
     """
-    FR-1.4 Komparasi Head-to-Head 2-4 komponen berdampingan.
+    FR-1.3 Head-to-Head Comparison matrix for 2-4 components.
     """
     try:
-        id_list = [int(i.strip()) for i in ids.split(",") if i.strip()]
+        id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid IDs format")
+        raise HTTPException(status_code=400, detail="Invalid ID list format.")
 
-    if len(id_list) < 1 or len(id_list) > 4:
-        raise HTTPException(status_code=400, detail="Pilih antara 1 hingga 4 komponen untuk dibandingkan.")
+    if len(id_list) < 2 or len(id_list) > 4:
+        raise HTTPException(status_code=400, detail="Harap pilih 2 hingga 4 komponen untuk dibandingkan.")
 
     items = db.query(HardwareBenchmark).filter(HardwareBenchmark.id.in_(id_list)).all()
-    # Sort in requested order
-    item_map = {item.id: item for item in items}
-    return [item_map[i] for i in id_list if i in item_map]
+    if len(items) != len(id_list):
+        raise HTTPException(status_code=404, detail="Satu atau lebih komponen tidak ditemukan.")
+    return items
 
 @app.get("/api/hardware/{hardware_id}", response_model=HardwareItem)
 def get_hardware_detail(hardware_id: int, db: Session = Depends(get_db)):
     """
-    FR-1.3 Spesifikasi Detail hardware.
+    Mendapatkan detail spesifikasi satu komponen.
     """
     item = db.query(HardwareBenchmark).filter(HardwareBenchmark.id == hardware_id).first()
     if not item:
@@ -119,41 +124,27 @@ def get_hardware_detail(hardware_id: int, db: Session = Depends(get_db)):
     return item
 
 @app.get("/api/games", response_model=List[GameItem])
-def get_games(
-    genre: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
+def get_games_catalog(db: Session = Depends(get_db)):
     """
-    Katalog game beserta profil bobot komputasi CPU/GPU.
+    FR-2.1 Mengambil katalog game beserta bobot CPU/GPU.
     """
-    query = db.query(Game)
-    if genre:
-        query = query.filter(Game.genre.ilike(f"%{genre}%"))
-    return query.order_by(Game.title.asc()).all()
+    return db.query(Game).all()
 
 @app.post("/api/calculate", response_model=CalculationResponse)
-def calculate_fps(
-    req: CalculationRequest,
-    db: Session = Depends(get_db)
-):
+def calculate_performance(req: CalculationRequest, db: Session = Depends(get_db)):
     """
-    FR-2.1, FR-2.2, FR-2.3: Kalkulasi Estimasi Average & 1% Low FPS serta Bottleneck.
+    FR-2.1, FR-2.2, FR-2.3, FR-2.4 Harmonic Frame Time Calculation Engine.
     """
-    cpu = db.query(HardwareBenchmark).filter(
-        and_(HardwareBenchmark.id == req.cpu_id, HardwareBenchmark.category == "cpu")
-    ).first()
-    if not cpu:
-        raise HTTPException(status_code=404, detail="CPU dengan ID tersebut tidak ditemukan.")
-
-    gpu = db.query(HardwareBenchmark).filter(
-        and_(HardwareBenchmark.id == req.gpu_id, HardwareBenchmark.category == "gpu")
-    ).first()
-    if not gpu:
-        raise HTTPException(status_code=404, detail="GPU dengan ID tersebut tidak ditemukan.")
-
+    cpu = db.query(HardwareBenchmark).filter(HardwareBenchmark.id == req.cpu_id).first()
+    gpu = db.query(HardwareBenchmark).filter(HardwareBenchmark.id == req.gpu_id).first()
     game = db.query(Game).filter(Game.id == req.game_id).first()
+
+    if not cpu or cpu.category != "cpu":
+        raise HTTPException(status_code=400, detail="CPU yang dipilih tidak valid.")
+    if not gpu or gpu.category != "gpu":
+        raise HTTPException(status_code=400, detail="GPU yang dipilih tidak valid.")
     if not game:
-        raise HTTPException(status_code=404, detail="Game dengan ID tersebut tidak ditemukan.")
+        raise HTTPException(status_code=400, detail="Game yang dipilih tidak valid.")
 
     result = calculate_fps_and_bottleneck(
         cpu=cpu,
@@ -176,10 +167,8 @@ def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
     matched_cpu = None
     if parsed["cpu_query"]:
         raw_cpu = parsed["cpu_query"].strip()
-        # Bersihkan kata umum
         clean_cpu = re.sub(r"\b(Intel|AMD|Core|Processor|Prosesor|Generation|Gen|Laptop|Desktop)\b", "", raw_cpu, flags=re.I).strip()
         
-        # Coba exact contains
         if clean_cpu:
             matched_cpu = db.query(HardwareBenchmark).filter(
                 and_(
@@ -188,7 +177,6 @@ def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
                 )
             ).first()
 
-        # Coba ekstrak model code spesifik (misal: 1115G4, 13420H, 5600H, N100, N4020, 7840HS, 3250U, 7500F)
         if not matched_cpu:
             code_m = re.search(r"\b(i[3579]-?\d{4,5}[A-Z0-9]{1,4}|N\d{2,3}|\d{4,5}[A-Z0-9]{1,4})\b", raw_cpu, re.I)
             if code_m:
@@ -199,7 +187,6 @@ def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
                     )
                 ).first()
 
-        # Fallback kata per kata
         if not matched_cpu:
             words = [w for w in clean_cpu.split() if len(w) >= 3]
             for w in words:
@@ -218,7 +205,6 @@ def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
         raw_gpu = parsed["gpu_query"].strip()
         clean_gpu = re.sub(r"\b(NVIDIA|GeForce|AMD|Radeon|Graphics|Grafis|VGA|Card|GDDR\d?)\b", "", raw_gpu, flags=re.I).strip()
 
-        # Khusus Integrated Graphics (Intel UHD / Iris Xe / Radeon Graphics / Vega)
         if re.search(r"\b(Intel\s+UHD|UHD\s+Graphics|Intel\s+HD)\b", raw_gpu, re.I):
             matched_gpu = db.query(HardwareBenchmark).filter(
                 and_(
@@ -241,11 +227,9 @@ def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
                 )
             ).first()
         
-        # Coba GPU model code (misal: 3050, 4060, 1650, 780M, 680M, MX350)
         if not matched_gpu:
             gpu_code = re.search(r"\b(RTX\s*\d{4}|GTX\s*\d{4}|RX\s*\d{4}|MX\d{3}|GT\s*\d{3}|\d{3,4}M|\d{4})\b", raw_gpu, re.I)
             if gpu_code:
-                # Prefer laptop form factor
                 matched_gpu = db.query(HardwareBenchmark).filter(
                     and_(
                         HardwareBenchmark.category == "gpu",
@@ -304,3 +288,37 @@ def trigger_etl_pipeline(raw_items: List[dict], db: Session = Depends(get_db)):
         upserted_count += 1
     db.commit()
     return {"status": "success", "upserted_count": upserted_count}
+
+@app.get("/api/calibration/metrics")
+def get_calibration_metrics(db: Session = Depends(get_db)):
+    """
+    FR-4.1 Statistical Evaluation Engine (MAPE, RMSE, R2, Accuracy %).
+    """
+    return evaluate_model_accuracy(db)
+
+@app.post("/api/calibration/run")
+def run_model_calibration_endpoint(db: Session = Depends(get_db)):
+    """
+    FR-4.2 Automated Weight Calibration & Metric Logging.
+    """
+    return run_auto_calibration(db)
+
+@app.get("/api/ground-truth")
+def get_ground_truth_samples(db: Session = Depends(get_db)):
+    """
+    Mengambil data ground truth riil hasil scraping.
+    """
+    return evaluate_model_accuracy(db)
+
+@app.post("/api/scraper/ground-truth/run")
+def run_ground_truth_scraper_endpoint(db: Session = Depends(get_db)):
+    """
+    Menjalankan ground truth scraper & RapidFuzz entity normalizer.
+    """
+    count = seed_ground_truth_benchmarks(db, force_refresh=True)
+    metrics = evaluate_model_accuracy(db)
+    return {
+        "status": "success",
+        "seeded_count": count,
+        "metrics": metrics
+    }

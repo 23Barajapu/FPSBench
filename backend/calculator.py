@@ -43,23 +43,17 @@ def calculate_fps_and_bottleneck(
     res_factor = RESOLUTION_SCALING.get(resolution, RESOLUTION_SCALING["1080p"])
     preset_factor = PRESET_SCALING.get(preset, 1.0)
 
-    # 1. Hitung Kapasitas Teoretis CPU (Frame budget CPU)
+    # 1. Hitung Kapasitas Teoretis CPU (Frame capacity CPU)
     # Single-core menyumbang 65% untuk game, multi-core 35%
     cpu_power_index = (
         (cpu.single_score / CPU_BASELINE_SINGLE) * 0.65 +
         (cpu.multi_score / CPU_BASELINE_MULTI) * 0.35
     )
-    # CPU bottleneck lebih terasa di resolusi rendah (1080p) dan game CPU-heavy
-    fps_cpu_capacity = (game.base_fps_1080p_ultra * cpu_power_index) / (game.cpu_weight * res_factor["cpu_load"])
+    # CPU capacity scaling dengan resolusi
+    fps_cpu_capacity = (game.base_fps_1080p_ultra * cpu_power_index) / res_factor["cpu_load"]
 
-    # 2. Hitung Kapasitas Teoretis GPU (Frame budget GPU)
+    # 2. Hitung Kapasitas Teoretis GPU (Frame capacity GPU)
     gpu_power_index = gpu.multi_score / GPU_BASELINE_SCORE
-    
-    # Laptop TGP modifier jika ada (e.g. RTX 4060 Laptop 45W vs 140W)
-    if gpu.form_factor == "laptop" and gpu.tgp_watts:
-        # Standar TGP reference 100W, kurva efisiensi logaritmik
-        tgp_ratio = min(1.3, max(0.6, gpu.tgp_watts / 100.0))
-        # multi_score sudah merefleksikan pengujian riil, tapi berikan fine-tuning jika VRAM terbatas
     
     # VRAM check penalty
     vram_penalty = 1.0
@@ -68,7 +62,7 @@ def calculate_fps_and_bottleneck(
     elif resolution == "1440p" and (gpu.vram_gb or 8) < 8:
         vram_penalty = 0.90
 
-    gpu_load_multiplier = game.gpu_weight * res_factor["gpu_load"] * preset_factor
+    gpu_load_multiplier = res_factor["gpu_load"] * preset_factor
     fps_gpu_capacity = (game.base_fps_1080p_ultra * gpu_power_index * vram_penalty) / gpu_load_multiplier
 
     # 3. Efek Kapasitas RAM
@@ -82,14 +76,21 @@ def calculate_fps_and_bottleneck(
         is_ram_limited = True
 
     # 4. Harmonic Frame Time Calculation
-    # Waktu render total gabungan CPU frame preparation time + GPU rasterization time
-    t_cpu_ms = (game.cpu_weight / fps_cpu_capacity) * 1000.0
-    t_gpu_ms = (game.gpu_weight / fps_gpu_capacity) * 1000.0
+    # Waktu render tahap komputasi CPU & GPU pipeline
+    t_cpu_ms = (1000.0 / fps_cpu_capacity) * game.cpu_weight
+    t_gpu_ms = (1000.0 / fps_gpu_capacity) * game.gpu_weight
     
-    # Overlap komputasi CPU & GPU pipeline (pipelining efisiensi ~75%)
-    t_frame_total_ms = max(t_cpu_ms, t_gpu_ms) + 0.25 * min(t_cpu_ms, t_gpu_ms)
+    # Overlap komputasi CPU & GPU pipeline
+    # Pada game eSports / framerate tinggi (>120 FPS), pipeline latency bounded
+    pipeline_overlap = 0.45 if game.genre == "eSports" else 0.30
+    t_frame_total_ms = max(t_cpu_ms, t_gpu_ms) + pipeline_overlap * min(t_cpu_ms, t_gpu_ms)
     
     raw_avg_fps = (1000.0 / t_frame_total_ms) * ram_penalty
+
+    # Engine frame cap (misal: Elden Ring / FromSoftware engine 60 FPS cap)
+    if "FromSoftware" in (game.engine or "") or "Elden Ring" in game.title:
+        raw_avg_fps = min(60.0, raw_avg_fps)
+
     avg_fps = round(max(5.0, raw_avg_fps), 1)
 
     # 5. 1% Low FPS Estimation

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, Text
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey
+from datetime import datetime
 from .database import Base
 
 class HardwareBenchmark(Base):
@@ -40,3 +41,35 @@ class PresetMultiplier(Base):
     res_gpu_scale = Column(Float, default=1.0) # Scale load on GPU for resolution
     res_cpu_scale = Column(Float, default=1.0) # Scale load on CPU for resolution
     preset_scale = Column(Float, default=1.0) # Graphic quality multiplier
+
+class GroundTruthBenchmark(Base):
+    """
+    Tabel data benchmark riil hasil scraping (NotebookCheck, TechPowerUp, pengujian fisik).
+    Digunakan sebagai acuan kalibrasi statistik (MAPE / RMSE).
+    """
+    __tablename__ = "ground_truth_benchmarks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cpu_id = Column(Integer, ForeignKey("hardware_benchmarks.id"), nullable=False)
+    gpu_id = Column(Integer, ForeignKey("hardware_benchmarks.id"), nullable=False)
+    game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
+    resolution = Column(String(20), default="1080p")
+    preset = Column(String(20), default="Ultra")
+    real_avg_fps = Column(Float, nullable=False)
+    real_low_fps = Column(Float, nullable=True)
+    source_url = Column(String(255), default="NotebookCheck / TechPowerUp Ground Truth")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class ModelCalibration(Base):
+    """
+    Log hasil kalibrasi model statistik (MAPE, RMSE, R²).
+    """
+    __tablename__ = "model_calibrations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    calibrated_at = Column(DateTime, default=datetime.utcnow)
+    mape_score = Column(Float, nullable=False) # e.g. 5.4%
+    rmse_score = Column(Float, nullable=False) # e.g. 4.2 FPS
+    r2_score = Column(Float, nullable=False) # e.g. 0.94
+    sample_count = Column(Integer, default=0)
+    coefficient_payload = Column(Text, nullable=True) # JSON of calibrated multipliers

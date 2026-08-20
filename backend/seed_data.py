@@ -332,20 +332,20 @@ def seed_database(force_refresh: bool = False):
     ]
 
     # ==========================================
-    # 3. GAMES CATALOG
+    # 3. GAMES CATALOG (Calibrated to Real-World Reference Baseline)
     # ==========================================
     games = [
-        Game(title="Cyberpunk 2077", genre="AAA Action", engine="REDengine 4", cpu_weight=0.25, gpu_weight=0.75, ram_min_gb=12, ram_rec_gb=16, base_fps_1080p_ultra=62.0),
-        Game(title="Black Myth: Wukong", genre="AAA Action", engine="Unreal Engine 5", cpu_weight=0.20, gpu_weight=0.80, ram_min_gb=16, ram_rec_gb=32, base_fps_1080p_ultra=55.0),
-        Game(title="Valorant", genre="eSports", engine="Unreal Engine 4", cpu_weight=0.55, gpu_weight=0.45, ram_min_gb=4, ram_rec_gb=8, base_fps_1080p_ultra=280.0),
-        Game(title="Counter-Strike 2", genre="eSports", engine="Source 2", cpu_weight=0.45, gpu_weight=0.55, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=185.0),
-        Game(title="Grand Theft Auto V", genre="Open World", engine="RAGE", cpu_weight=0.35, gpu_weight=0.65, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=115.0),
-        Game(title="Red Dead Redemption 2", genre="Open World", engine="RAGE", cpu_weight=0.25, gpu_weight=0.75, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=68.0),
-        Game(title="Elden Ring", genre="RPG / Action", engine="FromSoftware Engine", cpu_weight=0.30, gpu_weight=0.70, ram_min_gb=12, ram_rec_gb=16, base_fps_1080p_ultra=60.0),
-        Game(title="Forza Horizon 5", genre="Racing / Simulation", engine="ForzaTech", cpu_weight=0.30, gpu_weight=0.70, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=95.0),
+        Game(title="Cyberpunk 2077", genre="AAA Action", engine="REDengine 4", cpu_weight=0.25, gpu_weight=0.75, ram_min_gb=12, ram_rec_gb=16, base_fps_1080p_ultra=48.0),
+        Game(title="Black Myth: Wukong", genre="AAA Action", engine="Unreal Engine 5", cpu_weight=0.20, gpu_weight=0.80, ram_min_gb=16, ram_rec_gb=32, base_fps_1080p_ultra=38.0),
+        Game(title="Valorant", genre="eSports", engine="Unreal Engine 4", cpu_weight=0.55, gpu_weight=0.45, ram_min_gb=4, ram_rec_gb=8, base_fps_1080p_ultra=310.0),
+        Game(title="Counter-Strike 2", genre="eSports", engine="Source 2", cpu_weight=0.45, gpu_weight=0.55, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=135.0),
+        Game(title="Grand Theft Auto V", genre="Open World", engine="RAGE", cpu_weight=0.35, gpu_weight=0.65, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=88.0),
+        Game(title="Red Dead Redemption 2", genre="Open World", engine="RAGE", cpu_weight=0.25, gpu_weight=0.75, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=58.0),
+        Game(title="Elden Ring", genre="RPG / Action", engine="FromSoftware Engine", cpu_weight=0.30, gpu_weight=0.70, ram_min_gb=12, ram_rec_gb=16, base_fps_1080p_ultra=58.0),
+        Game(title="Forza Horizon 5", genre="Racing / Simulation", engine="ForzaTech", cpu_weight=0.30, gpu_weight=0.70, ram_min_gb=8, ram_rec_gb=16, base_fps_1080p_ultra=58.0),
         Game(title="Dota 2", genre="eSports", engine="Source 2", cpu_weight=0.50, gpu_weight=0.50, ram_min_gb=4, ram_rec_gb=8, base_fps_1080p_ultra=160.0),
-        Game(title="Hogwarts Legacy", genre="RPG / Open World", engine="Unreal Engine 4", cpu_weight=0.30, gpu_weight=0.70, ram_min_gb=16, ram_rec_gb=16, base_fps_1080p_ultra=58.0),
-        Game(title="Microsoft Flight Simulator 2024", genre="Simulation", engine="Asobo Engine", cpu_weight=0.45, gpu_weight=0.55, ram_min_gb=16, ram_rec_gb=32, base_fps_1080p_ultra=45.0),
+        Game(title="Hogwarts Legacy", genre="RPG / Open World", engine="Unreal Engine 4", cpu_weight=0.30, gpu_weight=0.70, ram_min_gb=16, ram_rec_gb=16, base_fps_1080p_ultra=46.0),
+        Game(title="Microsoft Flight Simulator 2024", genre="Simulation", engine="Asobo Engine", cpu_weight=0.45, gpu_weight=0.55, ram_min_gb=16, ram_rec_gb=32, base_fps_1080p_ultra=38.0),
     ]
 
     # ==========================================

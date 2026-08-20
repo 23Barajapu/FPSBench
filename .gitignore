@@ -9,6 +9,10 @@
 secrets/
 config.local.json
 
+# Internal Documentation & Specs
+PRD.md
+*.prd.md
+
 # Database & SQLite
 *.db
 *.sqlite
