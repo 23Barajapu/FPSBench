@@ -168,48 +168,84 @@ def calculate_fps(
 @app.post("/api/hardware/parse-raw-spec")
 def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
     """
-    Ekstraksi spesifikasi teks mentah (e-commerce/brosur laptop) dan pencocokan otomatis hardware.
+    Ekstraksi spesifikasi teks mentah (e-commerce/brosur laptop) dan pencocokan cerdas hardware.
     """
     parsed = parse_raw_laptop_spec(req.raw_text)
     
-    # 1. Cari CPU yang cocok (prefer form_factor laptop)
+    # 1. Pencocokan Cerdas CPU
     matched_cpu = None
     if parsed["cpu_query"]:
-        # Coba exact search atau contains
-        clean_q = parsed["cpu_query"].strip()
-        matched_cpu = db.query(HardwareBenchmark).filter(
-            and_(
-                HardwareBenchmark.category == "cpu",
-                HardwareBenchmark.name.ilike(f"%{clean_q}%")
-            )
-        ).first()
+        raw_cpu = parsed["cpu_query"].strip()
+        # Bersihkan kata umum
+        clean_cpu = re.sub(r"\b(Intel|AMD|Core|Processor|Prosesor|Generation|Gen|Laptop|Desktop)\b", "", raw_cpu, flags=re.I).strip()
+        
+        # Coba exact contains
+        if clean_cpu:
+            matched_cpu = db.query(HardwareBenchmark).filter(
+                and_(
+                    HardwareBenchmark.category == "cpu",
+                    HardwareBenchmark.name.ilike(f"%{clean_cpu}%")
+                )
+            ).first()
+
+        # Coba ekstrak model code spesifik (misal: 1115G4, 13420H, 5600H, N100, N4020, 7840HS, 3250U, 7500F)
         if not matched_cpu:
-            # Cari core code e.g. "13420H"
-            core_code = re.search(r"\b\d{4,5}[A-Z]{1,2}\b", clean_q)
-            if core_code:
+            code_m = re.search(r"\b(i[3579]-?\d{4,5}[A-Z0-9]{1,4}|N\d{2,3}|\d{4,5}[A-Z0-9]{1,4})\b", raw_cpu, re.I)
+            if code_m:
                 matched_cpu = db.query(HardwareBenchmark).filter(
                     and_(
                         HardwareBenchmark.category == "cpu",
-                        HardwareBenchmark.name.ilike(f"%{core_code.group(0)}%")
+                        HardwareBenchmark.name.ilike(f"%{code_m.group(0)}%")
                     )
                 ).first()
 
-    # 2. Cari GPU yang cocok (prefer form_factor laptop)
+        # Fallback kata per kata
+        if not matched_cpu:
+            words = [w for w in clean_cpu.split() if len(w) >= 3]
+            for w in words:
+                matched_cpu = db.query(HardwareBenchmark).filter(
+                    and_(
+                        HardwareBenchmark.category == "cpu",
+                        HardwareBenchmark.name.ilike(f"%{w}%")
+                    )
+                ).first()
+                if matched_cpu:
+                    break
+
+    # 2. Pencocokan Cerdas GPU
     matched_gpu = None
     if parsed["gpu_query"]:
-        clean_g = parsed["gpu_query"].strip()
-        # Prefer laptop GPU
-        matched_gpu = db.query(HardwareBenchmark).filter(
-            and_(
-                HardwareBenchmark.category == "gpu",
-                HardwareBenchmark.form_factor == "laptop",
-                HardwareBenchmark.name.ilike(f"%{clean_g}%")
-            )
-        ).first()
+        raw_gpu = parsed["gpu_query"].strip()
+        clean_gpu = re.sub(r"\b(NVIDIA|GeForce|AMD|Radeon|Graphics|Grafis|VGA|Card|GDDR\d?)\b", "", raw_gpu, flags=re.I).strip()
+
+        # Khusus Integrated Graphics (Intel UHD / Iris Xe / Radeon Graphics / Vega)
+        if re.search(r"\b(Intel\s+UHD|UHD\s+Graphics|Intel\s+HD)\b", raw_gpu, re.I):
+            matched_gpu = db.query(HardwareBenchmark).filter(
+                and_(
+                    HardwareBenchmark.category == "gpu",
+                    HardwareBenchmark.name.ilike("%Intel UHD%")
+                )
+            ).first()
+        elif re.search(r"\b(Iris\s*Xe|Intel\s+Iris)\b", raw_gpu, re.I):
+            matched_gpu = db.query(HardwareBenchmark).filter(
+                and_(
+                    HardwareBenchmark.category == "gpu",
+                    HardwareBenchmark.name.ilike("%Iris Xe%")
+                )
+            ).first()
+        elif re.search(r"\b(Radeon\s+Graphics|Vega\s*\d+|Radeon\s+Vega)\b", raw_gpu, re.I):
+            matched_gpu = db.query(HardwareBenchmark).filter(
+                and_(
+                    HardwareBenchmark.category == "gpu",
+                    HardwareBenchmark.name.ilike("%Radeon%")
+                )
+            ).first()
+        
+        # Coba GPU model code (misal: 3050, 4060, 1650, 780M, 680M, MX350)
         if not matched_gpu:
-            # Coba number code e.g. "3050"
-            gpu_code = re.search(r"\b\d{4}\b", clean_g)
+            gpu_code = re.search(r"\b(RTX\s*\d{4}|GTX\s*\d{4}|RX\s*\d{4}|MX\d{3}|GT\s*\d{3}|\d{3,4}M|\d{4})\b", raw_gpu, re.I)
             if gpu_code:
+                # Prefer laptop form factor
                 matched_gpu = db.query(HardwareBenchmark).filter(
                     and_(
                         HardwareBenchmark.category == "gpu",
@@ -217,12 +253,19 @@ def parse_raw_spec_endpoint(req: RawSpecInput, db: Session = Depends(get_db)):
                         HardwareBenchmark.name.ilike(f"%{gpu_code.group(0)}%")
                     )
                 ).first()
-        if not matched_gpu:
-            # Fallback ke GPU umum
+                if not matched_gpu:
+                    matched_gpu = db.query(HardwareBenchmark).filter(
+                        and_(
+                            HardwareBenchmark.category == "gpu",
+                            HardwareBenchmark.name.ilike(f"%{gpu_code.group(0)}%")
+                        )
+                    ).first()
+
+        if not matched_gpu and clean_gpu:
             matched_gpu = db.query(HardwareBenchmark).filter(
                 and_(
                     HardwareBenchmark.category == "gpu",
-                    HardwareBenchmark.name.ilike(f"%{clean_g}%")
+                    HardwareBenchmark.name.ilike(f"%{clean_gpu}%")
                 )
             ).first()
 

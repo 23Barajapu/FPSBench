@@ -155,7 +155,7 @@ Display : 15.6 inch FHD 144Hz"
         <label class="field-label">Kapasitas RAM</label>
         <div class="btn-group">
           <button 
-            v-for="ram in [8, 16, 32, 64]" 
+            v-for="ram in [4, 8, 16, 32, 64]" 
             :key="ram"
             class="opt-btn"
             :class="{ active: selectedRam === ram }"

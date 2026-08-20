@@ -1,6 +1,6 @@
 """
 Scraper & Data Pipeline Normalizer.
-Memproses raw benchmark feeds dan mengekstrak metrik hardware terstandar.
+Memproses raw benchmark feeds, normalisasi form factor, dan ekstraksi spesifikasi teks mentah.
 """
 import re
 from typing import Dict, Any, List
@@ -18,26 +18,28 @@ def normalize_hardware_name(raw_name: str) -> Dict[str, Any]:
     vram = None
 
     # Deteksi Brand
-    if re.search(r"\b(Intel|Core|i[3579])\b", clean_name, re.I):
+    if re.search(r"\b(Intel|Core|i[3579]|Celeron|Pentium|Xeon)\b", clean_name, re.I):
         brand = "Intel"
-    elif re.search(r"\b(AMD|Ryzen|Radeon)\b", clean_name, re.I):
+    elif re.search(r"\b(AMD|Ryzen|Radeon|Athlon)\b", clean_name, re.I):
         brand = "AMD"
-    elif re.search(r"\b(NVIDIA|GeForce|RTX|GTX)\b", clean_name, re.I):
+    elif re.search(r"\b(NVIDIA|GeForce|RTX|GTX|MX\d{3}|GT\s*\d{3})\b", clean_name, re.I):
         brand = "NVIDIA"
+    elif re.search(r"\b(Apple|M[1234])\b", clean_name, re.I):
+        brand = "Apple"
 
     # Deteksi Kategori
-    if re.search(r"\b(RTX|GTX|Radeon RX|GeForce|Intel Arc|GPU)\b", clean_name, re.I):
+    if re.search(r"\b(RTX|GTX|Radeon RX|GeForce|Intel Arc|GPU|Iris|UHD Graphics|HD Graphics|Radeon \d{3}M|Radeon Vega|Vega \d+|MX\d{3}|GT\s*\d{3})\b", clean_name, re.I):
         category = "gpu"
     else:
         category = "cpu"
 
     # Deteksi Form Factor & Suffix
-    laptop_cpu_patterns = r"(HX|H|HS|U|P|HK|G[1-7]|Max-Q|Laptop|Mobile)\b"
+    laptop_cpu_patterns = r"(HX|H|HS|U|P|HK|G[1-7]|Max-Q|Laptop|Mobile|Celeron|Pentium|N\d{2,3}|Athlon Silver)\b"
     if category == "cpu":
         if re.search(laptop_cpu_patterns, clean_name, re.I):
             form_factor = "laptop"
     elif category == "gpu":
-        if re.search(r"\b(Laptop|Mobile|Max-Q|Max-P)\b", clean_name, re.I):
+        if re.search(r"\b(Laptop|Mobile|Max-Q|Max-P|Iris|UHD|Vega|M\b|\d{3}M\b|MX\d{3})\b", clean_name, re.I):
             form_factor = "laptop"
 
     # Ekstraksi TGP jika ada (misal: "RTX 4060 Laptop 140W")
@@ -80,14 +82,13 @@ def run_etl_pipeline(raw_records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def parse_raw_laptop_spec(raw_text: str) -> Dict[str, Any]:
     """
-    Mengekstrak spesifikasi laptop dari teks mentah (format toko/spesifikasi e-commerce).
-    Mengembalikan dict spesifikasi terstruktur untuk pencocokan ke database hardware.
+    Mengekstrak spesifikasi laptop dari teks mentah (format toko, e-commerce, bullet list atau paragraf koma).
     """
     extracted = {
         "raw_text": raw_text,
         "cpu_query": "",
         "gpu_query": "",
-        "ram_gb": 16,
+        "ram_gb": 8,
         "resolution": "1080p",
         "display_hz": 60,
         "storage": "",
@@ -96,59 +97,77 @@ def parse_raw_laptop_spec(raw_text: str) -> Dict[str, Any]:
         "os": ""
     }
 
-    lines = raw_text.splitlines()
-    for line in lines:
-        line_clean = line.strip()
-        if not line_clean:
-            continue
+    if not raw_text or not raw_text.strip():
+        return extracted
 
-        # 1. Processor / CPU
-        if re.search(r"^(Processor|CPU)\s*[:\-]/i", line_clean, re.I) or re.search(r"\b(i[3579]-?\d{4,5}[A-Z]{1,2}|Ryzen\s+[3579]\s+\d{4}[A-Z]{1,2})\b", line_clean, re.I):
-            cpu_match = re.search(r"(i[3579]-?\d{4,5}[A-Z]{1,2}|Ryzen\s+[3579]\s+\d{4}[A-Z]{1,2}|Core\s+Ultra\s+\d{1,3}[A-Z]?)", line_clean, re.I)
-            if cpu_match:
-                extracted["cpu_query"] = cpu_match.group(1)
-            else:
-                val = re.sub(r"^(Processor|CPU)\s*[:\-]\s*", "", line_clean, flags=re.I)
-                extracted["cpu_query"] = val.split("(")[0].strip()
+    # Pecah berdasarkan newline, titik-koma, atau koma yang diikuti kata kunci spesifikasi
+    chunks = re.split(r"[\r\n;]+|,\s*(?=(?:prosesor|processor|cpu|ram|memory|penyimpanan|storage|ssd|grafis|vga|graphics|gpu|layar|display|sistem operasi|os|baterai|battery)\b)", raw_text, flags=re.I)
 
-        # 2. Graphics / GPU
-        if re.search(r"^(Graphics|GPU|VGA|Graphic Card)\s*[:\-]/i", line_clean, re.I) or re.search(r"\b(RTX|GTX|Radeon|Iris|GeForce)\b", line_clean, re.I):
-            gpu_match = re.search(r"(RTX\s*\d{4}(\s*Ti)?|GTX\s*\d{4}(\s*Ti)?|Radeon\s*RX\s*\d{4}[A-Z]?)", line_clean, re.I)
-            if gpu_match:
-                extracted["gpu_query"] = gpu_match.group(0)
-            else:
-                val = re.sub(r"^(Graphics|GPU|VGA|Graphic Card)\s*[:\-]\s*", "", line_clean, flags=re.I)
-                extracted["gpu_query"] = val.strip()
+    # 1. Ekstraksi RAM terlebih dahulu (cari pola RAM/Memory X GB)
+    ram_match = re.search(r"(?:RAM|Memory|Memori)\s*[:\s=–-]*\s*(\d{1,3})\s*GB", raw_text, re.I)
+    if not ram_match:
+        ram_match = re.search(r"\b(\d{1,3})\s*GB\s*(?:DDR[345]|LPDDR[45]|RAM|Memory)\b", raw_text, re.I)
+    if ram_match:
+        extracted["ram_gb"] = int(ram_match.group(1))
 
-        # 3. Memory / RAM
-        if re.search(r"^(Memory|RAM)\s*[:\-]/i", line_clean, re.I) or re.search(r"\b\d{1,3}\s*GB\s*(DDR|RAM|Memory)\b", line_clean, re.I):
-            ram_match = re.search(r"(\d{1,3})\s*GB", line_clean, re.I)
-            if ram_match:
-                extracted["ram_gb"] = int(ram_match.group(1))
+    # 2. Ekstraksi Resolusi & Refresh rate (hindari pencocokan kata 'UHD' dari 'Intel UHD')
+    if re.search(r"(?:3840\s*x\s*2160|\b4K\b|UHD\s+(?:screen|display|layar|monitor|panel|res))", raw_text, re.I):
+        extracted["resolution"] = "4K"
+    elif re.search(r"(?:2560\s*x\s*1440|1440p|QHD|2K|WQXGA|2.8K|2880\s*x\s*1800)", raw_text, re.I):
+        extracted["resolution"] = "1440p"
+    elif re.search(r"(?:1920\s*x\s*1080|1080p|Full\s*HD|FHD|1920\s*x\s*1200|WUXGA)", raw_text, re.I):
+        extracted["resolution"] = "1080p"
+    else:
+        extracted["resolution"] = "1080p" # Default standard gaming base
 
-        # 4. Display & Resolution
-        if re.search(r"^(Display|Layar|Screen)\s*[:\-]/i", line_clean, re.I) or re.search(r"(1920\s*x\s*1080|2560\s*x\s*1440|3840\s*x\s*2160|Full HD|QHD|4K|144Hz|165Hz|240Hz)", line_clean, re.I):
-            extracted["display_desc"] = re.sub(r"^(Display|Layar|Screen)\s*[:\-]\s*", "", line_clean, flags=re.I)
-            if re.search(r"(3840\s*x\s*2160|4K|UHD)", line_clean, re.I):
-                extracted["resolution"] = "4K"
-            elif re.search(r"(2560\s*x\s*1440|1440p|QHD|2K)", line_clean, re.I):
-                extracted["resolution"] = "1440p"
-            elif re.search(r"(1920\s*x\s*1080|1080p|Full HD|FHD)", line_clean, re.I):
-                extracted["resolution"] = "1080p"
+    hz_match = re.search(r"(\d{2,3})\s*Hz\b", raw_text, re.I)
+    if hz_match:
+        extracted["display_hz"] = int(hz_match.group(1))
 
-            hz_match = re.search(r"(\d{2,3})\s*Hz", line_clean, re.I)
-            if hz_match:
-                extracted["display_hz"] = int(hz_match.group(1))
+    # 3. Ekstraksi CPU
+    # Coba cari pola eksplisit prosesor
+    cpu_explicit = re.search(r"(?:prosesor|processor|cpu)\s*[:\s=–-]*\s*([^,\n;]+)", raw_text, re.I)
+    if cpu_explicit:
+        raw_cpu = cpu_explicit.group(1).strip()
+        # Ambil model code jika ada
+        model_m = re.search(r"\b(i[3579]-?\d{4,5}[A-Z0-9]{1,4}|Core\s+Ultra\s+\d+\s*\w*|Ryzen\s+[3579]\s+\d{4}[A-Z0-9]*|Celeron\s+[A-Z0-9]+|Pentium\s+[A-Z0-9]+|Athlon\s+[A-Z0-9]+|Intel\s+Processor\s+N\d{2,3})\b", raw_cpu, re.I)
+        if model_m:
+            extracted["cpu_query"] = model_m.group(0).strip()
+        else:
+            extracted["cpu_query"] = raw_cpu.split("(")[0].strip()
+    else:
+        # Cari pola model langsung di seluruh teks
+        model_direct = re.search(r"\b(i[3579]-?\d{4,5}[A-Z0-9]{1,4}|Core\s+Ultra\s+\d+\s*\w*|Ryzen\s+[3579]\s+\d{4}[A-Z0-9]*|Celeron\s+[A-Z0-9]+|Pentium\s+[A-Z0-9]+|Intel\s+Processor\s+N\d{2,3})\b", raw_text, re.I)
+        if model_direct:
+            extracted["cpu_query"] = model_direct.group(0).strip()
 
-        # 5. Storage
-        if re.search(r"^(Storage|Penyimpanan|SSD|HDD)\s*[:\-]/i", line_clean, re.I):
-            extracted["storage"] = re.sub(r"^(Storage|Penyimpanan|SSD|HDD)\s*[:\-]\s*", "", line_clean, flags=re.I)
+    # 4. Ekstraksi GPU
+    # Coba cari pola eksplisit grafis / GPU / VGA
+    gpu_explicit = re.search(r"(?:grafis|graphics|gpu|vga|kartu grafis)\s*[:\s=–-]*\s*([^,\n;]+)", raw_text, re.I)
+    if gpu_explicit:
+        raw_gpu = gpu_explicit.group(1).strip()
+        # Cari model spesifik
+        gpu_m = re.search(r"\b(RTX\s*\d{4}(?:\s*Ti)?(?:\s*\d+GB)?|GTX\s*\d{4}(?:\s*Ti)?|Radeon\s*RX\s*\d{4}[A-Z]?|Intel\s+(?:Iris\s*Xe|UHD|HD\s*Graphics)|Radeon\s+(?:Vega\s*\d+|Graphics|\d{3}M)|GeForce\s+MX\d{3}|GeForce\s+GT\s*\d{3})\b", raw_gpu, re.I)
+        if gpu_m:
+            extracted["gpu_query"] = gpu_m.group(0).strip()
+        else:
+            extracted["gpu_query"] = raw_gpu.strip()
+    else:
+        # Cari pola GPU langsung di seluruh teks
+        gpu_direct = re.search(r"\b(RTX\s*\d{4}(?:\s*Ti)?|GTX\s*\d{4}(?:\s*Ti)?|Radeon\s*RX\s*\d{4}[A-Z]?|Intel\s+Iris\s*Xe|Intel\s+UHD|Intel\s+HD\s*Graphics|Radeon\s+Vega\s*\d+|Radeon\s+Graphics|GeForce\s+MX\d{3})\b", raw_text, re.I)
+        if gpu_direct:
+            extracted["gpu_query"] = gpu_direct.group(0).strip()
 
-        # 6. Battery & OS
-        if re.search(r"^(Baterry|Battery|Baterai)\s*[:\-]/i", line_clean, re.I):
-            extracted["battery"] = re.sub(r"^(Baterry|Battery|Baterai)\s*[:\-]\s*", "", line_clean, flags=re.I)
-        if re.search(r"^(Operating System|OS)\s*[:\-]/i", line_clean, re.I):
-            extracted["os"] = re.sub(r"^(Operating System|OS)\s*[:\-]\s*", "", line_clean, flags=re.I)
+    # 5. Storage & Battery
+    storage_m = re.search(r"(?:penyimpanan|storage|ssd|hdd)\s*[:\s=–-]*\s*([^,\n;]+)", raw_text, re.I)
+    if storage_m:
+        extracted["storage"] = storage_m.group(1).strip()
+    elif re.search(r"(\d{3,4}\s*GB\s*(?:SSD|NVMe|HDD)|\d\s*TB\s*(?:SSD|NVMe|HDD))", raw_text, re.I):
+        st_m = re.search(r"(\d{3,4}\s*GB\s*(?:SSD|NVMe|HDD)|\d\s*TB\s*(?:SSD|NVMe|HDD))", raw_text, re.I)
+        extracted["storage"] = st_m.group(1).strip()
+
+    battery_m = re.search(r"(?:baterai|baterry|battery)\s*[:\s=–-]*\s*([^,\n;]+)", raw_text, re.I)
+    if battery_m:
+        extracted["battery"] = battery_m.group(1).strip()
 
     return extracted
-
