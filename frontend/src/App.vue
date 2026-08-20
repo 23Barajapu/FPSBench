@@ -101,28 +101,12 @@ const latestResult = ref(null)
 const fetchInitialData = async () => {
   try {
     const [hwRes, gameRes] = await Promise.all([
-      fetch('/api/hardware/search?limit=100'),
+      fetch('/api/hardware/search?limit=500'),
       fetch('/api/games')
     ])
     if (hwRes.ok && gameRes.ok) {
       hardwareList.value = await hwRes.json()
       games.value = await gameRes.json()
-
-      // Initial default calculation
-      if (hardwareList.value.length > 0 && games.value.length > 0 && !latestResult.value) {
-        const defaultCpu = hardwareList.value.find(i => i.name.includes('13420H') || i.name.includes('13400F')) || hardwareList.value[0]
-        const defaultGpu = hardwareList.value.find(i => i.name.includes('3050') || i.name.includes('4060')) || hardwareList.value[1]
-        if (defaultCpu && defaultGpu) {
-          handleCalculate({
-            cpu_id: defaultCpu.id,
-            gpu_id: defaultGpu.id,
-            game_id: games.value[0].id,
-            ram_gb: 16,
-            resolution: '1080p',
-            preset: 'Ultra'
-          })
-        }
-      }
     }
   } catch (err) {
     console.error('Error fetching data from API:', err)

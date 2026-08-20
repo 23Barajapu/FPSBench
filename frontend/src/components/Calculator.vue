@@ -324,38 +324,32 @@ const selectCpu = (cpu) => {
   selectedCpu.value = cpu
   cpuSearch.value = `${cpu.brand} ${cpu.name}`
   showCpuDropdown.value = false
-  liveRecalculate()
 }
 
 const selectGpu = (gpu) => {
   selectedGpu.value = gpu
   gpuSearch.value = `${gpu.brand} ${gpu.name}`
   showGpuDropdown.value = false
-  liveRecalculate()
 }
 
 const selectGame = (id) => {
   selectedGameId.value = id
-  liveRecalculate()
 }
 
 const setRam = (ram) => {
   selectedRam.value = ram
-  liveRecalculate()
 }
 
 const setResolution = (res) => {
   selectedResolution.value = res
-  liveRecalculate()
 }
 
 const setPreset = (p) => {
   selectedPreset.value = p
-  liveRecalculate()
 }
 
-const liveRecalculate = () => {
-  if (!selectedCpu.value || !selectedGpu.value) return
+const triggerCalculate = () => {
+  if (!selectedCpu.value || !selectedGpu.value || !selectedGameId.value) return
   emit('calculate', {
     cpu_id: selectedCpu.value.id,
     gpu_id: selectedGpu.value.id,
@@ -366,14 +360,32 @@ const liveRecalculate = () => {
   })
 }
 
-watch(() => props.hardwareList, (list) => {
+// Single authoritative watcher on all state parameters
+watch(
+  [selectedCpu, selectedGpu, selectedGameId, selectedRam, selectedResolution, selectedPreset],
+  () => {
+    triggerCalculate()
+  }
+)
+
+// Initialize default hardware & game when props arrive
+watch([() => props.hardwareList, () => props.games], ([list, gList]) => {
+  if (gList && gList.length > 0 && !selectedGameId.value) {
+    selectedGameId.value = gList[0].id
+  } else if (gList && gList.length > 0 && selectedGameId.value === 1 && gList[0].id !== 1) {
+    selectedGameId.value = gList[0].id
+  }
+
   if (list && list.length > 0 && !selectedCpu.value) {
     const defaultCpu = list.find(i => i.name.includes('13420H') || i.name.includes('13400F')) || list[0]
     const defaultGpu = list.find(i => i.name.includes('3050 6GB') || i.name.includes('3050')) || list[1]
-    if (defaultCpu) selectCpu(defaultCpu)
-    if (defaultGpu) selectGpu(defaultGpu)
-    if (props.games.length > 0) {
-      selectedGameId.value = props.games[0].id
+    if (defaultCpu) {
+      selectedCpu.value = defaultCpu
+      cpuSearch.value = `${defaultCpu.brand} ${defaultCpu.name}`
+    }
+    if (defaultGpu) {
+      selectedGpu.value = defaultGpu
+      gpuSearch.value = `${defaultGpu.brand} ${defaultGpu.name}`
     }
   }
 }, { immediate: true })
