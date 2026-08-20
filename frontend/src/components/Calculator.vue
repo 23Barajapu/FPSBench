@@ -255,11 +255,66 @@ const isCalculating = ref(false)
 
 // Popular laptop presets for instant testing
 const laptopPresets = [
-  { name: "Lenovo LOQ (i5-13420H + RTX 3050 6GB)", cpu: "13420H", gpu: "RTX 3050 6GB Laptop (95W)", ram: 16 },
-  { name: "Acer Nitro V15 (i5-13420H + RTX 4050)", cpu: "13420H", gpu: "RTX 4050 Laptop (95W)", ram: 16 },
-  { name: "ASUS TUF A15 (Ryzen 7 7735HS + RTX 4060)", cpu: "7735HS", gpu: "RTX 4060 Laptop (140W)", ram: 16 },
-  { name: "ROG Strix G16 (i9-14900HX + RTX 4080)", cpu: "14900HX", gpu: "RTX 4080 Laptop (175W)", ram: 32 },
-  { name: "PC Rakitan Hemat (Ryzen 5 5600 + RTX 4060)", cpu: "5600", gpu: "GeForce RTX 4060", ram: 16, desktop: true },
+  { 
+    name: "Lenovo LOQ (i5-13420H + RTX 3050 6GB)", 
+    cpu: "13420H", 
+    gpu: "RTX 3050 6GB Laptop (95W)", 
+    ram: 16,
+    resolution: "1080p",
+    rawText: `Processor : 13th Generation Intel Core i5-13420H Processor (8 Cores, up to 4.60 GHz)
+Graphics : NVIDIA GeForce RTX 3050 6GB GDDR6 (95W TGP)
+Memory : 16GB DDR5 5200MHz
+Storage : 512GB PCIe NVMe M.2 SSD
+Display : 15.6 inch Full HD IPS (1920 x 1080), 144Hz 100% sRGB`
+  },
+  { 
+    name: "Acer Nitro V15 (i5-13420H + RTX 4050)", 
+    cpu: "13420H", 
+    gpu: "RTX 4050 Laptop (95W)", 
+    ram: 16,
+    resolution: "1080p",
+    rawText: `Processor : Intel Core i5-13420H Processor (12M Cache, up to 4.60 GHz)
+Graphics : NVIDIA GeForce RTX 4050 6GB GDDR6 (95W TGP)
+Memory : 16GB DDR5 5200MHz
+Storage : 512GB SSD PCIe NVMe
+Display : 15.6 inch FHD IPS 144Hz Slim Bezel`
+  },
+  { 
+    name: "ASUS TUF A15 (Ryzen 7 7735HS + RTX 4060)", 
+    cpu: "7735HS", 
+    gpu: "RTX 4060 Laptop (140W)", 
+    ram: 16,
+    resolution: "1080p",
+    rawText: `Processor : AMD Ryzen 7 7735HS Mobile Processor (8-core/16-thread, up to 4.75 GHz)
+Graphics : NVIDIA GeForce RTX 4060 Laptop GPU 8GB GDDR6 (140W Max TGP, MUX Switch)
+Memory : 16GB DDR5 4800MHz
+Storage : 512GB PCIe 4.0 NVMe M.2 SSD
+Display : 15.6 inch FHD (1920 x 1080) 144Hz IPS`
+  },
+  { 
+    name: "ROG Strix G16 (i9-14900HX + RTX 4080)", 
+    cpu: "14900HX", 
+    gpu: "RTX 4080 Laptop (175W)", 
+    ram: 32,
+    resolution: "1440p",
+    rawText: `Processor : 14th Gen Intel Core i9-14900HX Processor (24 Cores, up to 5.80 GHz)
+Graphics : NVIDIA GeForce RTX 4080 Laptop GPU 12GB GDDR6 (175W Max TGP)
+Memory : 32GB DDR5 5600MHz
+Storage : 1TB PCIe 4.0 NVMe M.2 SSD
+Display : 16.0 inch QHD+ (2560 x 1600) 240Hz ROG Nebula Display`
+  },
+  { 
+    name: "PC Rakitan Hemat (Ryzen 5 5600 + RTX 4060)", 
+    cpu: "5600", 
+    gpu: "GeForce RTX 4060", 
+    ram: 16, 
+    resolution: "1080p",
+    rawText: `Processor : AMD Ryzen 5 5600 6-Core 12-Thread Desktop Processor (3.5 GHz up to 4.4 GHz)
+Graphics : NVIDIA GeForce RTX 4060 8GB GDDR6
+Memory : 16GB (2x8GB) DDR4 3200MHz Dual Channel
+Storage : 1TB NVMe PCIe Gen3 SSD
+Display : 24 inch 1080p Full HD IPS 144Hz Gaming Monitor`
+  },
 ]
 
 const applyPreset = (p) => {
@@ -268,6 +323,18 @@ const applyPreset = (p) => {
   if (cpu) selectCpu(cpu)
   if (gpu) selectGpu(gpu)
   if (p.ram) selectedRam.value = p.ram
+  if (p.resolution) selectedResolution.value = p.resolution
+  if (p.rawText) {
+    rawSpecText.value = p.rawText
+    parsedDetails.value = {
+      matched_cpu: cpu,
+      matched_gpu: gpu,
+      parsed: {
+        ram_gb: p.ram,
+        resolution: p.resolution || '1080p'
+      }
+    }
+  }
 }
 
 const sampleSpec = `Processor : 13th Generation Intel Core i5-13420H Processor (12M Cache, up to 4.60 GHz)
