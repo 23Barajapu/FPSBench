@@ -66,7 +66,7 @@ def search_hardware(
     q: str = Query("", min_length=0, description="Search query"),
     category: Optional[str] = Query(None, pattern="^(cpu|gpu)$"),
     form_factor: Optional[str] = Query(None, pattern="^(desktop|laptop)$"),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db)
 ):
     """
